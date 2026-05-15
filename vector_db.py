@@ -1,37 +1,84 @@
 from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct
+import uuid
 
 
 class QdrantStorage:
-    def __init__(self, url="http://localhost:6333", collection="docs", dim=3072):
-        self.client = QdrantClient(url=url, timeout=30)
-        self.collection = collection
-        if not self.client.collection_exists(self.collection):
+    def __init__(
+        self,
+        collection_name="docs",
+        host="localhost",
+        port=6333,
+        vector_size=384
+    ):
+        self.collection_name = collection_name
+
+        self.client = QdrantClient(
+            host=host,
+            port=port
+        )
+
+        collections = self.client.get_collections().collections
+        exists = any(
+            c.name == collection_name
+            for c in collections
+        )
+
+        if not exists:
             self.client.create_collection(
-                collection_name=self.collection,
-                vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=vector_size,
+                    distance=Distance.COSINE
+                )
             )
 
-    def upsert(self, ids, vectors, payloads):
-        points = [PointStruct(id=ids[i], vector=vectors[i], payload=payloads[i]) for i in range(len(ids))]
-        self.client.upsert(self.collection, points=points)
+    def upsert(
+        self,
+        texts,
+        embeddings,
+        metadata=None
+    ):
+        points = []
 
-    def search(self, query_vector, top_k: int = 5):
-        results = self.client.search(
-            collection_name=self.collection,
-            query_vector=query_vector,
-            with_payload=True,
-            limit=top_k
+        for i, (text, embedding) in enumerate(
+            zip(texts, embeddings)
+        ):
+            payload = {
+                "text": text
+            }
+
+            if metadata:
+                payload.update(metadata)
+
+            points.append(
+                PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embedding,
+                    payload=payload
+                )
+            )
+
+        self.client.upsert(
+            collection_name=self.collection_name,
+            points=points
         )
-        contexts = []
-        sources = set()
 
-        for r in results:
-            payload = getattr(r, "payload", None) or {}
-            text = payload.get("text", "")
-            source = payload.get("source", "")
-            if text:
-                contexts.append(text)
-                sources.add(source)
+    def search(
+        self,
+        query_embedding,
+        limit=5
+    ):
+        results = self.client.query_points(
+            collection_name=self.collection_name,
+            query=query_embedding,
+            limit=limit
+        )
 
-        return {"contexts": contexts, "sources": list(sources)}
+        return [
+            {
+                "score": point.score,
+                "text": point.payload["text"]
+            }
+            for point in results.points
+        ]

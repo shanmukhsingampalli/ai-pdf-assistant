@@ -1,6 +1,6 @@
 # Python-generated files
 __pycache__/
-*.py[oc]
+*.py[cod]
 build/
 dist/
 wheels/
@@ -10,3 +10,4 @@ wheels/
 .venv
 /uploads
 .env
+/qdrant_storage
