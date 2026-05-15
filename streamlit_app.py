@@ -5,10 +5,10 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-from data_loader import load_and_chunk_pdf
+from data_loader import load_and_chunk_pdf, embed_texts
 from vector_db import QdrantStorage
 from sentence_transformers import SentenceTransformer
-from vector_db import query_vector_db
+from groq import Groq
 
 load_dotenv()
 
@@ -424,9 +424,19 @@ if uploaded is not None:
                 "BAAI/bge-small-en-v1.5"
             )
 
-            index_chunks(
+            embeddings = embed_texts(
                 chunks,
                 embedding_model
+            )
+
+            store = QdrantStorage()
+
+            store.upsert(
+                chunks,
+                embeddings,
+                metadata={
+                    "source": path.name
+                }
             )
 
             time.sleep(1)
@@ -482,43 +492,74 @@ with st.form("rag_query_form"):
                 "Generating AI response..."
             ):
 
-                result = query_vector_db(
-                    question.strip(),
+                query_embedding = embedding_model.encode(
+                    question.strip()
+                ).tolist()
+
+                store = QdrantStorage()
+
+                results = store.search(
+                    query_embedding,
                     int(top_k)
                 )
 
-                answer = result.get(
-                    "answer",
-                    ""
+                contexts = [
+                    r["text"]
+                    for r in results
+                ]
+
+                context_text = "\n\n".join(contexts)
+
+                client = Groq(
+                    api_key=os.getenv("GROQ_API_KEY")
                 )
 
-                sources = result.get(
-                    "sources",
-                    []
+                completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": f"""
+Answer the question using the context below.
+
+Context:
+{context_text}
+
+Question:
+{question}
+"""
+                        }
+                    ]
                 )
 
-            st.markdown(
-                '<div class="answer-box">',
-                unsafe_allow_html=True
-            )
+                answer = completion.choices[0].message.content
 
-            st.subheader("✨ AI Answer")
+                sources = [
+                    "PDF Document"
+                ]
 
-            st.write(
-                answer if answer else "No answer generated."
-            )
+                st.markdown(
+                    '<div class="answer-box">',
+                    unsafe_allow_html=True
+                )
 
-            if sources:
+                st.subheader("✨ AI Answer")
 
-                st.markdown("### 📚 Sources")
+                st.write(
+                    answer if answer else "No answer generated."
+                )
 
-                for s in sources:
-                    st.write(f"- {s}")
+                if sources:
 
-            st.markdown(
-                '</div>',
-                unsafe_allow_html=True
-            )
+                    st.markdown("### 📚 Sources")
+
+                    for s in sources:
+                        st.write(f"- {s}")
+
+                st.markdown(
+                    '</div>',
+                    unsafe_allow_html=True
+                )
 
         except Exception as e:
 
