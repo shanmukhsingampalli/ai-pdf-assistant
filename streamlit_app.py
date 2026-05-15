@@ -1,12 +1,12 @@
-import asyncio
 from pathlib import Path
 import time
 import os
-import requests
 
 import streamlit as st
-import inngest
 from dotenv import load_dotenv
+
+from data_loader import ingest_pdf
+from vector_db import query_vector_db
 
 load_dotenv()
 
@@ -23,6 +23,7 @@ st.set_page_config(
 # =========================================================
 # CUSTOM CSS
 # =========================================================
+
 st.markdown("""
 <style>
 
@@ -187,10 +188,6 @@ INPUTS
 FILE UPLOADER
 ========================================================= */
 
-/* =========================================================
-FILE UPLOADER - PREMIUM DARK UI
-========================================================= */
-
 [data-testid="stFileUploader"] {
 
     background: rgba(8,15,35,0.85);
@@ -208,8 +205,6 @@ FILE UPLOADER - PREMIUM DARK UI
         inset 0 0 20px rgba(255,255,255,0.015);
 }
 
-/* inner upload area */
-
 [data-testid="stFileUploader"] section {
 
     background: rgba(15,23,42,0.92) !important;
@@ -223,16 +218,12 @@ FILE UPLOADER - PREMIUM DARK UI
     transition: 0.3s ease;
 }
 
-/* hover effect */
-
 [data-testid="stFileUploader"] section:hover {
 
     border: 1px dashed rgba(96,165,250,0.55) !important;
 
     background: rgba(20,30,55,0.95) !important;
 }
-
-/* upload button */
 
 [data-testid="stFileUploader"] button {
 
@@ -255,8 +246,6 @@ FILE UPLOADER - PREMIUM DARK UI
     box-shadow: 0 0 18px rgba(59,130,246,0.28);
 }
 
-/* upload button hover */
-
 [data-testid="stFileUploader"] button:hover {
 
     transform: translateY(-1px);
@@ -266,16 +255,12 @@ FILE UPLOADER - PREMIUM DARK UI
         0 0 50px rgba(59,130,246,0.18);
 }
 
-/* text inside uploader */
-
 [data-testid="stFileUploader"] small,
 [data-testid="stFileUploader"] span,
 [data-testid="stFileUploader"] label {
 
     color: #cbd5e1 !important;
 }
-
-/* uploaded file container */
 
 [data-testid="stFileUploaderFile"] {
 
@@ -342,31 +327,6 @@ ANSWER BOX
 }
 
 /* =========================================================
-SUCCESS / ERROR
-========================================================= */
-
-.stSuccess {
-    background: rgba(0,120,80,0.18);
-    border-radius: 18px;
-}
-
-.stError {
-    border-radius: 18px;
-}
-
-/* =========================================================
-REMOVE WHITE AREAS
-========================================================= */
-
-[data-testid="stMarkdownContainer"] {
-    color: #e5e7eb;
-}
-
-section[data-testid="stSidebar"] {
-    background: #020617;
-}
-
-/* =========================================================
 SCROLLBAR
 ========================================================= */
 
@@ -381,18 +341,6 @@ SCROLLBAR
 
 </style>
 """, unsafe_allow_html=True)
-
-# =========================================================
-# INNGEST CLIENT
-# =========================================================
-
-@st.cache_resource
-def get_inngest_client() -> inngest.Inngest:
-    return inngest.Inngest(
-        app_id="rag_app",
-        is_production=False
-    )
-
 
 # =========================================================
 # SAVE PDF
@@ -414,32 +362,6 @@ def save_uploaded_pdf(file) -> Path:
     file_path.write_bytes(file_bytes)
 
     return file_path
-
-
-# =========================================================
-# SEND INGEST EVENT
-# =========================================================
-
-async def send_rag_ingest_event(pdf_path: Path):
-
-    client = get_inngest_client()
-
-    result = await client.send(
-        inngest.Event(
-            name="rag/ingest_pdf",
-            data={
-                "pdf_path": str(pdf_path.resolve()),
-                "source_id": pdf_path.name,
-            },
-        )
-    )
-
-    return result
-
-
-# =========================================================
-# HERO SECTION
-# =========================================================
 
 # =========================================================
 # HERO SECTION
@@ -488,137 +410,29 @@ uploaded = st.file_uploader(
 
 if uploaded is not None:
 
-    with st.spinner("Uploading and triggering ingestion..."):
+    try:
 
-        path = save_uploaded_pdf(uploaded)
+        with st.spinner("Processing PDF..."):
 
-        result = asyncio.run(
-            send_rag_ingest_event(path)
+            path = save_uploaded_pdf(uploaded)
+
+            ingest_pdf(path)
+
+            time.sleep(1)
+
+        st.success(
+            f"PDF successfully ingested: {path.name}"
         )
 
-        time.sleep(0.5)
+        st.caption(
+            "Your document is now ready for AI querying."
+        )
 
-    st.success(
-      f"PDF successfully ingested: {path.name}"
-    )
+    except Exception as e:
 
-    st.caption(
-      "Your document is now ready for AI querying."
-    )
+        st.error(f"Upload failed: {str(e)}")
 
 st.markdown('</div>', unsafe_allow_html=True)
-
-# =========================================================
-# QUERY EVENT
-# =========================================================
-
-async def send_rag_query_event(
-    question: str,
-    top_k: int
-):
-
-    client = get_inngest_client()
-
-    result = await client.send(
-        inngest.Event(
-            name="rag/query_pdf_ai",
-            data={
-                "question": question,
-                "top_k": top_k,
-            },
-        )
-    )
-
-    return result[0]
-
-
-# =========================================================
-# INNGEST DEV SERVER API
-# =========================================================
-
-def _inngest_api_base():
-
-    return os.getenv(
-        "INNGEST_API_BASE",
-        "http://127.0.0.1:8288/v1"
-    )
-
-
-def fetch_runs(event_id: str):
-
-    url = f"{_inngest_api_base()}/events/{event_id}/runs"
-
-    print(f"Polling: {url}")
-
-    resp = requests.get(url)
-
-    resp.raise_for_status()
-
-    data = resp.json()
-
-    return data.get("data", [])
-
-
-# =========================================================
-# WAIT FOR OUTPUT
-# =========================================================
-
-def wait_for_run_output(
-    event_id: str,
-    timeout_s: float = 300.0,
-    poll_interval_s: float = 1.0,
-):
-
-    start = time.time()
-
-    last_status = None
-
-    while True:
-
-        runs = fetch_runs(event_id)
-
-        if runs:
-
-            run = runs[0]
-
-            status = run.get("status")
-
-            output = run.get("output")
-
-            last_status = status
-
-            print("RUN STATUS =", status)
-
-            if output:
-                print("OUTPUT =", output)
-
-            if status in (
-                "Completed",
-                "Succeeded",
-                "Success",
-                "Finished",
-            ):
-                return output or {}
-
-            if status in (
-                "Failed",
-                "Cancelled",
-            ):
-                raise RuntimeError(
-                    f"Function run status: {status}"
-                )
-
-        elapsed = time.time() - start
-
-        if elapsed > timeout_s:
-
-            raise TimeoutError(
-                f"Timed out waiting for run output "
-                f"(last status: {last_status})"
-            )
-
-        time.sleep(poll_interval_s)
-
 
 # =========================================================
 # QUERY UI
@@ -657,23 +471,17 @@ with st.form("rag_query_form"):
                 "Generating AI response..."
             ):
 
-                event_id = asyncio.run(
-                    send_rag_query_event(
-                        question.strip(),
-                        int(top_k),
-                    )
+                result = query_vector_db(
+                    question.strip(),
+                    int(top_k)
                 )
 
-                output = wait_for_run_output(
-                    event_id
-                )
-
-                answer = output.get(
+                answer = result.get(
                     "answer",
                     ""
                 )
 
-                sources = output.get(
+                sources = result.get(
                     "sources",
                     []
                 )
@@ -686,7 +494,7 @@ with st.form("rag_query_form"):
             st.subheader("✨ AI Answer")
 
             st.write(
-                answer or "(No answer)"
+                answer if answer else "No answer generated."
             )
 
             if sources:
@@ -703,10 +511,6 @@ with st.form("rag_query_form"):
 
         except Exception as e:
 
-            st.error(str(e))
-
-            import traceback
-
-            st.code(traceback.format_exc())
+            st.error(f"Question request failed: {str(e)}")
 
 st.markdown('</div>', unsafe_allow_html=True)
