@@ -340,7 +340,162 @@ SCROLLBAR
     background: #1e40af;
     border-radius: 20px;
 }
+/* =========================================================
+RESPONSIVE DESIGN
+========================================================= */
 
+/* Tablets */
+
+@media (max-width: 1024px) {
+
+    .hero-title {
+        font-size: 58px;
+        line-height: 1.1;
+    }
+
+    .hero-subtitle {
+        font-size: 20px;
+        padding: 0 20px;
+    }
+
+    .hero-search-box {
+        padding: 24px;
+        margin: 20px;
+    }
+
+    .glass-card {
+        padding: 28px;
+        margin: 20px;
+    }
+
+    .section-title {
+        font-size: 32px;
+    }
+}
+
+/* Mobile */
+
+@media (max-width: 768px) {
+
+    .main-container {
+        padding-top: 30px;
+    }
+
+    .hero-title {
+
+        font-size: 42px;
+
+        line-height: 1.15;
+
+        letter-spacing: -1px;
+
+        padding: 0 10px;
+    }
+
+    .hero-subtitle {
+
+        font-size: 17px;
+
+        line-height: 1.6;
+
+        padding: 0 18px;
+
+        margin-bottom: 30px;
+    }
+
+    .hero-badge {
+
+        font-size: 13px;
+
+        padding: 8px 16px;
+    }
+
+    .hero-search-box {
+
+        margin: 15px;
+
+        padding: 20px;
+
+        border-radius: 22px;
+    }
+
+    .search-placeholder {
+
+        font-size: 17px;
+
+        text-align: center;
+    }
+
+    .glass-card {
+
+        margin: 15px;
+
+        padding: 22px;
+
+        border-radius: 24px;
+    }
+
+    .section-title {
+
+        font-size: 26px;
+
+        margin-bottom: 22px;
+    }
+
+    .stTextInput input,
+    .stNumberInput input {
+
+        font-size: 15px !important;
+
+        padding: 14px !important;
+    }
+
+    .stButton > button,
+    .stFormSubmitButton > button {
+
+        width: 100%;
+
+        padding: 14px;
+
+        font-size: 16px;
+    }
+
+    [data-testid="stFileUploader"] {
+
+        padding: 18px;
+    }
+
+    [data-testid="stFileUploader"] section {
+
+        padding: 16px !important;
+    }
+
+    .answer-box {
+
+        padding: 20px;
+    }
+}
+
+/* Small phones */
+
+@media (max-width: 480px) {
+
+    .hero-title {
+        font-size: 34px;
+    }
+
+    .hero-subtitle {
+        font-size: 15px;
+    }
+
+    .section-title {
+        font-size: 22px;
+    }
+
+    .search-placeholder {
+        font-size: 15px;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
