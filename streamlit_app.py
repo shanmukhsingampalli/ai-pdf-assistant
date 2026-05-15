@@ -5,7 +5,9 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-from data_loader import ingest_pdf
+from data_loader import load_and_chunk_pdf
+from vector_db import index_chunks, query_vector_db
+from sentence_transformers import SentenceTransformer
 from vector_db import query_vector_db
 
 load_dotenv()
@@ -416,17 +418,26 @@ if uploaded is not None:
 
             path = save_uploaded_pdf(uploaded)
 
-            ingest_pdf(path)
+            chunks = load_and_chunk_pdf(str(path))
+
+            embedding_model = SentenceTransformer(
+                "BAAI/bge-small-en-v1.5"
+            )
+
+            index_chunks(
+                chunks,
+                embedding_model
+            )
 
             time.sleep(1)
 
-        st.success(
-            f"PDF successfully ingested: {path.name}"
-        )
+            st.success(
+                f"PDF successfully ingested: {path.name}"
+            )
 
-        st.caption(
-            "Your document is now ready for AI querying."
-        )
+            st.caption(
+                "Your document is now ready for AI querying."
+            )
 
     except Exception as e:
 
