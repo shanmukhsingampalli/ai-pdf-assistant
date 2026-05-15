@@ -6,7 +6,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from data_loader import load_and_chunk_pdf
-from vector_db import index_chunks, query_vector_db
+from vector_db import QdrantStorage
 from sentence_transformers import SentenceTransformer
 from vector_db import query_vector_db
 
